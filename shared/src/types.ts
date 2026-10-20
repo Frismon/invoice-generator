@@ -12,6 +12,8 @@ export interface InvoiceSummary {
   number: string;
   customerName: string;
   totalCents: number;
+  issueDate: string;
+  dueDate: string;
   updatedAt: string;
   sentAt: string | null;
 }
@@ -20,6 +22,7 @@ export interface SendInvoiceResponse {
   messageId: string;
   preview: boolean;
   sentAt: string | null;
+  copiedTo: string | null;
 }
 
 export interface FieldIssue {

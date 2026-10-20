@@ -26,8 +26,8 @@ export function createInvoiceController(service: InvoiceService) {
     },
 
     send: async (req: ByIdRequest) => {
-      const { to } = SendInvoiceSchema.parse(req.body);
-      return service.send(req.params.id, to);
+      const request = SendInvoiceSchema.parse(req.body);
+      return service.send(req.params.id, request);
     },
   };
 }

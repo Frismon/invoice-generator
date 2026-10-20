@@ -2,10 +2,11 @@ import type { ReactNode } from 'react';
 import { formatDate, formatUSD, type InvoiceInput, type Totals } from '@invoice/shared';
 import { cn } from '@/lib/utils';
 
-/** Placeholder text shown on screen while a field is empty, blank on paper. */
 function Placeholder({ children }: { children: ReactNode }) {
-  return <span className="text-neutral-400 print:invisible">{children}</span>;
+  return <span className="text-[#7a7368] print:invisible">{children}</span>;
 }
+
+const label = 'text-[10.5px] font-semibold tracking-[0.08em] text-[#5e584e] uppercase';
 
 interface InvoicePreviewProps {
   invoice: InvoiceInput;
@@ -13,102 +14,122 @@ interface InvoicePreviewProps {
   className?: string;
 }
 
-/**
- * The invoice document. It's both the live preview and what gets printed:
- * the page hides everything else under @media print (see app-shell.tsx), so
- * "Save as PDF" in the print dialog produces exactly this.
- */
 export function InvoicePreview({ invoice, totals, className }: InvoicePreviewProps) {
   const { business, customer } = invoice;
   const visibleFields = invoice.customFields.filter((f) => f.visible && (f.label.trim() || f.value.trim()));
+  const dueLine =
+    invoice.dueDate && invoice.dueDate === invoice.issueDate ? 'Due on receipt' : `Due by ${formatDate(invoice.dueDate) || '—'}`;
 
   return (
     <article
       aria-label="Invoice preview"
       className={cn(
-        'flex flex-col gap-10 bg-white p-8 text-[13px] leading-relaxed text-neutral-900 sm:p-12',
-        'print:p-0 print:text-[12px]',
+        'flex min-h-[1056px] flex-col rounded-[4px] bg-white p-12 text-[13px] leading-[1.45] text-[#1d1b17]',
+        'shadow-[0_1px_2px_rgba(60,45,20,.06),0_18px_40px_-12px_rgba(60,45,20,.18)]',
+        'max-sm:min-h-0 max-sm:p-6',
+        'print:min-h-[11in] print:rounded-none print:p-[0.75in] print:shadow-none',
         className,
       )}
     >
-      <header className="flex flex-wrap items-start justify-between gap-6">
-        <div className="flex flex-col">
-          <p className="text-base font-semibold">{business.name || <Placeholder>Business name</Placeholder>}</p>
-          {business.email && <p className="text-neutral-600">{business.email}</p>}
-          {business.address && <p className="whitespace-pre-line text-neutral-600">{business.address}</p>}
+      <div className="flex items-start justify-between gap-6 max-sm:flex-col">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-sm font-semibold">{business.name || <Placeholder>Your business</Placeholder>}</span>
+          {business.email && <span className="text-[#5e584e]">{business.email}</span>}
+          {business.address && <span className="whitespace-pre-line text-[#5e584e]">{business.address}</span>}
         </div>
-        <div className="flex flex-col sm:items-end">
-          <p className="text-2xl font-light tracking-tight">Invoice</p>
-          <p className="font-mono text-neutral-600">{invoice.number || <Placeholder>INV-0000</Placeholder>}</p>
+        <div className="flex flex-col items-end gap-2.5 text-right max-sm:items-start max-sm:text-left">
+          <div className="font-heading text-[36px] leading-none font-medium tracking-[-0.02em]">Invoice</div>
+          <div className="font-mono text-[11.5px] text-[#5e584e]">{invoice.number || <Placeholder>INV-0000</Placeholder>}</div>
+          <dl className="grid grid-cols-[auto_auto] gap-x-3.5 gap-y-0.5 text-[12.5px] tabular">
+            <dt className="text-[#5e584e]">Issued</dt>
+            <dd>{formatDate(invoice.issueDate) || '—'}</dd>
+            <dt className="text-[#5e584e]">Due</dt>
+            <dd className="font-semibold">{formatDate(invoice.dueDate) || '—'}</dd>
+          </dl>
         </div>
-      </header>
-
-      <div className="grid gap-6 sm:grid-cols-2">
-        <div className="flex flex-col">
-          <p className="mb-1 text-[11px] font-medium tracking-wide text-neutral-500 uppercase">Billed to</p>
-          <p className="font-medium">{customer.name || <Placeholder>Customer name</Placeholder>}</p>
-          {customer.email && <p className="text-neutral-600">{customer.email}</p>}
-          {customer.address && <p className="whitespace-pre-line text-neutral-600">{customer.address}</p>}
-        </div>
-        <dl className="grid grid-cols-[auto_1fr] content-start gap-x-6 gap-y-0.5 sm:justify-self-end">
-          <dt className="text-neutral-500">Issued</dt>
-          <dd>{formatDate(invoice.issueDate)}</dd>
-          <dt className="text-neutral-500">Due</dt>
-          <dd className="font-medium">{formatDate(invoice.dueDate)}</dd>
-          {visibleFields.map((f) => (
-            <div key={f.id} className="contents">
-              <dt className="text-neutral-500">{f.label}</dt>
-              <dd className="break-words">{f.value}</dd>
-            </div>
-          ))}
-        </dl>
       </div>
 
-      <table className="tabular w-full border-collapse">
+      <div className="mt-9 grid grid-cols-3 gap-x-5 gap-y-[18px] border-t border-[#eee7da] pt-5 max-sm:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className={label}>Billed to</span>
+          <span className="font-semibold">{customer.name || <Placeholder>Customer name</Placeholder>}</span>
+          {customer.email && <span className="text-[#5e584e] [overflow-wrap:anywhere]">{customer.email}</span>}
+          {customer.address && <span className="whitespace-pre-line text-[#5e584e]">{customer.address}</span>}
+        </div>
+        {visibleFields.map((f) => (
+          <div key={f.id} className="flex min-w-0 flex-col gap-1">
+            <span className={label}>{f.label || 'Untitled'}</span>
+            <span className="[overflow-wrap:anywhere]">{f.value || '—'}</span>
+          </div>
+        ))}
+      </div>
+
+      <table className="mt-9 w-full border-collapse tabular">
         <thead>
-          <tr className="border-b border-neutral-900 text-left text-[11px] tracking-wide text-neutral-500 uppercase">
-            <th scope="col" className="py-2 pr-4 font-medium">Description</th>
-            <th scope="col" className="py-2 pr-4 text-right font-medium">Qty</th>
-            <th scope="col" className="py-2 pr-4 text-right font-medium">Price</th>
-            <th scope="col" className="py-2 text-right font-medium">Amount</th>
+          <tr className="border-b-[1.5px] border-[#1d1b17]">
+            <th scope="col" className={cn(label, 'pb-2 text-left')}>Description</th>
+            <th scope="col" className={cn(label, 'w-14 pb-2 text-right')}>Qty</th>
+            <th scope="col" className={cn(label, 'w-24 pb-2 text-right')}>Price</th>
+            <th scope="col" className={cn(label, 'w-[100px] pb-2 text-right')}>Amount</th>
           </tr>
         </thead>
         <tbody>
           {invoice.items.map((item, i) => (
-            <tr key={item.id} className="border-b border-neutral-200 align-top break-inside-avoid">
-              <td className="py-2.5 pr-4 break-words">{item.description || <Placeholder>Untitled item</Placeholder>}</td>
-              <td className="py-2.5 pr-4 text-right">{item.quantity}</td>
-              <td className="py-2.5 pr-4 text-right whitespace-nowrap">{formatUSD(item.unitPriceCents)}</td>
-              <td className="py-2.5 text-right whitespace-nowrap">{formatUSD(totals.lineTotals[i] ?? 0)}</td>
+            <tr key={item.id} className="border-b border-[#eee7da] break-inside-avoid">
+              <td className="py-3 pr-3 [overflow-wrap:anywhere]">
+                {item.description || <Placeholder>Untitled item</Placeholder>}
+              </td>
+              <td className="py-3 text-right">{item.quantity}</td>
+              <td className="py-3 text-right whitespace-nowrap">{formatUSD(item.unitPriceCents)}</td>
+              <td className="py-3 text-right font-medium whitespace-nowrap">{formatUSD(totals.lineTotals[i] ?? 0)}</td>
             </tr>
           ))}
         </tbody>
       </table>
 
-      <dl className="tabular -mt-4 grid w-full grid-cols-[1fr_auto] gap-x-8 gap-y-1 self-end sm:w-72 break-inside-avoid">
-        <dt className="text-neutral-500">Subtotal</dt>
-        <dd className="text-right">{formatUSD(totals.subtotalCents)}</dd>
+      <div className="mt-4 ml-auto flex w-full max-w-[280px] flex-col gap-2 tabular break-inside-avoid">
+        <div className="flex justify-between text-[#5e584e]">
+          <span>Subtotal</span>
+          <span className="text-[#1d1b17]">{formatUSD(totals.subtotalCents)}</span>
+        </div>
         {totals.discountCents > 0 && (
-          <>
-            <dt className="text-neutral-500">Discount</dt>
-            <dd className="text-right">−{formatUSD(totals.discountCents)}</dd>
-          </>
+          <div className="flex justify-between text-[#5e584e]">
+            <span>Discount</span>
+            <span className="text-[#1d1b17]">−{formatUSD(totals.discountCents)}</span>
+          </div>
         )}
         {invoice.taxRate > 0 && (
-          <>
-            <dt className="text-neutral-500">Tax ({invoice.taxRate}%)</dt>
-            <dd className="text-right">{formatUSD(totals.taxCents)}</dd>
-          </>
+          <div className="flex justify-between text-[#5e584e]">
+            <span>Tax ({invoice.taxRate}%)</span>
+            <span className="text-[#1d1b17]">{formatUSD(totals.taxCents)}</span>
+          </div>
         )}
-        <div className="col-span-2 mt-2 grid grid-cols-subgrid items-baseline border-t border-neutral-900 pt-2">
-          <dt className="font-semibold">Total due</dt>
-          <dd className="text-right text-base font-semibold">{formatUSD(totals.totalCents)}</dd>
+        <div className="mt-1 flex items-baseline justify-between gap-3 border-t-[1.5px] border-[#1d1b17] pt-3.5">
+          <span className="font-semibold">
+            Total due <span className="font-normal text-[#5e584e]">USD</span>
+          </span>
+          <span className="font-heading text-[28px] leading-none font-semibold tracking-[-0.01em] text-[#1f4a35]">
+            {formatUSD(totals.totalCents)}
+          </span>
         </div>
-      </dl>
+        <span className="inline-flex h-6 items-center self-end rounded-full bg-[#e6efe8] px-2.5 text-xs font-semibold text-[#1f4a35]">
+          {dueLine}
+        </span>
+      </div>
 
       {invoice.notes && (
-        <p className="max-w-prose whitespace-pre-line text-neutral-600 break-inside-avoid">{invoice.notes}</p>
+        <div className="mt-8 flex flex-col gap-1.5 break-inside-avoid">
+          <span className={label}>Note</span>
+          <p className="whitespace-pre-line text-[#3a362f]">{invoice.notes}</p>
+        </div>
       )}
+
+      <div className="mt-auto pt-8">
+        <div className="flex justify-between gap-3 border-t border-[#eee7da] pt-3.5 text-[11.5px] text-[#5e584e]">
+          <span>{[business.name, business.email].filter(Boolean).join(' · ')}</span>
+          <span className="font-mono">{invoice.number}</span>
+        </div>
+      </div>
     </article>
   );
 }

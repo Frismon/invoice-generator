@@ -44,13 +44,15 @@ export function createInvoiceRepository(db: Db) {
           number: invoices.number,
           customerName: invoices.customerName,
           totalCents: invoices.totalCents,
+          data: invoices.data,
           updatedAt: invoices.updatedAt,
           sentAt: invoices.sentAt,
         })
         .from(invoices)
         .orderBy(desc(invoices.updatedAt))
         .limit(200)
-        .all();
+        .all()
+        .map(({ data, ...row }) => ({ ...row, issueDate: data.issueDate, dueDate: data.dueDate }));
     },
 
     findById(id: string): Invoice | undefined {

@@ -14,10 +14,10 @@ export function AppShell() {
   useSaveShortcut(save);
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col lg:h-dvh lg:overflow-hidden print:h-auto print:overflow-visible">
       <AppHeader onNew={() => setView('edit')} />
       <ViewTabs view={view} onChange={setView} />
-      <main className="grid flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] print:block">
+      <main className="mx-auto grid w-full max-w-[1360px] flex-1 items-start gap-8 px-4 pt-4 pb-6 sm:px-6 lg:min-h-0 lg:grid-cols-[minmax(0,636px)_minmax(0,1fr)] lg:items-stretch lg:py-0 print:block print:max-w-none print:p-0">
         <EditorPane hidden={view !== 'edit'} />
         <PreviewPane hidden={view !== 'preview'} />
       </main>

@@ -2,22 +2,20 @@ import { useId, type ReactNode } from 'react';
 
 interface SectionProps {
   title: string;
-  description?: string;
+  meta?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
 }
 
-export function Section({ title, description, action, children }: SectionProps) {
+export function Section({ title, meta, action, children }: SectionProps) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-4 px-4 py-6 sm:px-6">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-0.5">
-          <h2 id={id} className="text-sm font-semibold">
-            {title}
-          </h2>
-          {description && <p className="text-[13px] text-muted-foreground">{description}</p>}
-        </div>
+    <section aria-labelledby={id} className="rounded-[14px] border bg-card p-5">
+      <header className="mb-3.5 flex items-baseline justify-between gap-3">
+        <h2 id={id} className="text-[19px] leading-tight">
+          {title}
+        </h2>
+        {meta && <span className="text-[12.5px] text-muted-foreground">{meta}</span>}
         {action}
       </header>
       {children}

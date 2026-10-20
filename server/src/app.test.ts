@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { InvoiceInput } from '@invoice/shared';
 import { buildApp } from './app';
 import { createDb } from './db/client';
-import type { Mailer, OutgoingMail } from './mail/mailer';
+import { toMailError, type Mailer, type OutgoingMail } from './mail/mailer';
 
 const invoice: InvoiceInput = {
   number: 'INV-2026-001',
@@ -44,7 +44,15 @@ describe('invoices API', () => {
     const { id } = created.json();
 
     const list = (await app.inject('/api/invoices')).json();
-    expect(list).toEqual([expect.objectContaining({ id, number: 'INV-2026-001', totalCents: 9900 })]);
+    expect(list).toEqual([
+      expect.objectContaining({
+        id,
+        number: 'INV-2026-001',
+        totalCents: 9900,
+        issueDate: '2026-10-20',
+        dueDate: '2026-11-03',
+      }),
+    ]);
 
     const fetched = (await app.inject(`/api/invoices/${id}`)).json();
     expect(fetched).toMatchObject({ ...invoice, id, sentAt: null });
@@ -91,11 +99,73 @@ describe('invoices API', () => {
 
     const mail = sent[0]!;
     expect(mail.to).toBe('me@example.com');
-    expect(mail.subject).toContain('$99.00');
-    expect(mail.html).toContain('Acme &lt;Corp&gt;');
+    expect(mail.subject).toBe('Invoice INV-2026-001 from Northwind Studio');
+    expect(mail.html).toContain('$99.00');
+    expect(mail.html).toContain('Here’s invoice INV-2026-001');
     expect(mail.html).toContain('4500-17');
     expect(mail.html).not.toContain('SECRET-42');
     expect(mail.text).not.toContain('SECRET-42');
+  });
+
+  it('attaches the invoice as a PDF', async () => {
+    const { id } = (await app.inject({ method: 'POST', url: '/api/invoices', payload: invoice })).json();
+    await app.inject({ method: 'POST', url: `/api/invoices/${id}/send`, payload: { to: 'me@example.com' } });
+
+    const attachment = sent[0]!.attachments![0]!;
+    expect(attachment.filename).toBe('INV-2026-001.pdf');
+    expect(attachment.contentType).toBe('application/pdf');
+    expect(attachment.content.subarray(0, 4).toString('latin1')).toBe('%PDF');
+  });
+
+  it('uses a custom subject and message, escaped, without hidden fields', async () => {
+    const { id } = (await app.inject({ method: 'POST', url: '/api/invoices', payload: invoice })).json();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/invoices/${id}/send`,
+      payload: { to: 'me@example.com', subject: '  October work  ', message: 'Hi Acme <team>,\nSee attached.' },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const mail = sent[0]!;
+    expect(mail.subject).toBe('October work');
+    expect(mail.html).toContain('Hi Acme &lt;team&gt;,<br>See attached.');
+    expect(mail.text).toContain('Hi Acme <team>,\nSee attached.');
+    expect(mail.html).not.toContain('SECRET-42');
+    expect(mail.text).not.toContain('SECRET-42');
+  });
+
+  it('copies the sender only when asked', async () => {
+    const { id } = (await app.inject({ method: 'POST', url: '/api/invoices', payload: invoice })).json();
+    const send = (payload: object) => app.inject({ method: 'POST', url: `/api/invoices/${id}/send`, payload });
+
+    const copied = await send({ to: 'me@example.com', copyToSender: true });
+    expect(copied.json().copiedTo).toBe('hello@example.com');
+    expect(sent[0]!.cc).toBe('hello@example.com');
+
+    const notCopied = await send({ to: 'me@example.com', copyToSender: false });
+    expect(notCopied.json().copiedTo).toBeNull();
+    expect(sent[1]!.cc).toBeUndefined();
+
+    const absent = await send({ to: 'me@example.com' });
+    expect(absent.json().copiedTo).toBeNull();
+    expect(sent[2]!.cc).toBeUndefined();
+  });
+
+  it('does not copy the sender when the business has no email', async () => {
+    const { id } = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/invoices',
+        payload: { ...invoice, business: { ...invoice.business, email: '' } },
+      })
+    ).json();
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/invoices/${id}/send`,
+      payload: { to: 'me@example.com', copyToSender: true },
+    });
+    expect(res.json().copiedTo).toBeNull();
+    expect(sent[0]!.cc).toBeUndefined();
   });
 
   it('validates the recipient address', async () => {
@@ -146,5 +216,22 @@ describe('invoices API', () => {
     const send = () => app.inject({ method: 'POST', url: `/api/invoices/${id}/send`, payload: { to: 'me@example.com' } });
     for (let i = 0; i < 5; i++) expect((await send()).statusCode).toBe(200);
     expect((await send()).statusCode).toBe(429);
+  });
+
+  it('reports a rejected SMTP login as a clear 502', async () => {
+    const failing = await buildApp({
+      db: createDb(':memory:'),
+      mailer: {
+        async send() {
+          throw toMailError(Object.assign(new Error('Invalid login'), { code: 'EAUTH' }));
+        },
+      },
+    });
+    const { id } = (await failing.inject({ method: 'POST', url: '/api/invoices', payload: invoice })).json();
+    const res = await failing.inject({ method: 'POST', url: `/api/invoices/${id}/send`, payload: { to: 'me@example.com' } });
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toMatchObject({ error: 'MailAuthError', message: expect.stringContaining('SMTP_PASS') });
+    expect((await failing.inject(`/api/invoices/${id}`)).json().sentAt).toBeNull();
+    await failing.close();
   });
 });

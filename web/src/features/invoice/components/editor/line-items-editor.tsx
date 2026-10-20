@@ -1,15 +1,15 @@
 import { useState, type KeyboardEvent } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { formatUSD, type LineItem } from '@invoice/shared';
-import { Field } from '@/components/form/field';
+import { toId } from '@/components/form/field';
+import { useFormState } from '@/components/form/form-context';
 import { NumericInput } from '@/components/form/numeric-input';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { emptyLineItem } from '@/features/invoice/model/draft';
 import type { Recipe } from '@/features/invoice/model/types';
 import { cn } from '@/lib/utils';
 
-const columns = 'sm:grid-cols-[minmax(0,1fr)_5.5rem_8rem_7rem_2.25rem]';
+const columns = 'sm:grid-cols-[minmax(0,1fr)_68px_108px_92px]';
 
 interface LineItemsEditorProps {
   items: LineItem[];
@@ -17,13 +17,8 @@ interface LineItemsEditorProps {
   update: (recipe: Recipe) => void;
 }
 
-/**
- * A table on desktop (one header row, labels visually hidden per cell),
- * stacked cards on phones (labels visible). Same DOM, so tab order and
- * screen-reader labels are identical in both layouts.
- */
 export function LineItemsEditor({ items, lineTotals, update }: LineItemsEditorProps) {
-  // Focus the description of a freshly added row, not on initial render.
+  const { errorFor } = useFormState();
   const [focusId, setFocusId] = useState<string | null>(null);
 
   const patch = (id: string, changes: Partial<LineItem>) =>
@@ -37,101 +32,137 @@ export function LineItemsEditor({ items, lineTotals, update }: LineItemsEditorPr
 
   const remove = (id: string) => update((d) => ({ ...d, items: d.items.filter((it) => it.id !== id) }));
 
-  const onEnter = (e: KeyboardEvent<HTMLUListElement>) => {
+  const onEnter = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== 'Enter' || !(e.target instanceof HTMLInputElement)) return;
     e.preventDefault();
-    const index = Number(e.target.closest('li')?.dataset.index);
+    const index = Number(e.target.closest('[data-index]')?.getAttribute('data-index'));
     if (index === items.length - 1) add();
-    else document.getElementById(`f-items-${index + 1}-description`)?.focus();
+    else document.getElementById(toId(`items.${index + 1}.description`))?.focus();
+  };
+
+  const control = (path: string) => {
+    const error = errorFor(path);
+    const id = toId(path);
+    return {
+      id,
+      name: path,
+      'aria-invalid': Boolean(error),
+      'aria-describedby': error ? `${id}-error` : undefined,
+      error,
+    };
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <div aria-hidden className={cn('hidden gap-2 text-[13px] font-medium text-muted-foreground sm:grid', columns)}>
+    <div className="flex flex-col">
+      <div
+        aria-hidden
+        className={cn('hidden gap-2 pb-1.5 text-[11.5px] font-semibold tracking-[0.06em] text-muted-foreground uppercase sm:grid', columns)}
+      >
         <span>Description</span>
         <span className="text-right">Qty</span>
         <span className="text-right">Unit price</span>
         <span className="text-right">Amount</span>
-        <span />
       </div>
 
-      <ul className="flex flex-col gap-3 sm:gap-2" onKeyDown={onEnter}>
-        {items.map((item, i) => (
-          <li
-            key={item.id}
-            data-index={i}
-            className={cn(
-              'grid grid-cols-2 items-start gap-2 rounded-md border p-3',
-              'sm:rounded-none sm:border-0 sm:p-0',
-              columns,
-            )}
-          >
-            <Field
-              path={`items.${i}.description`}
-              label={`Description, line ${i + 1}`}
-              labelClassName="sm:sr-only"
-              className="col-span-2 sm:col-span-1"
+      <div role="list" className="flex flex-col gap-2" onKeyDown={onEnter}>
+        {items.map((item, i) => {
+          const desc = control(`items.${i}.description`);
+          const qty = control(`items.${i}.quantity`);
+          const price = control(`items.${i}.unitPriceCents`);
+          const errors = [desc, qty, price].filter((c) => c.error);
+          return (
+            <div
+              key={item.id}
+              role="listitem"
+              data-index={i}
+              className="flex flex-col gap-1 max-sm:rounded-xl max-sm:border max-sm:bg-white max-sm:p-3"
             >
-              {(p) => (
-                <Input
-                  {...p}
-                  value={item.description}
-                  placeholder="What you delivered"
-                  autoFocus={item.id === focusId}
-                  onChange={(e) => patch(item.id, { description: e.target.value })}
-                />
-              )}
-            </Field>
-            <Field path={`items.${i}.quantity`} label="Quantity" labelClassName="sm:sr-only">
-              {(p) => (
-                <NumericInput
-                  {...p}
-                  kind="decimal"
-                  decimals={3}
-                  value={item.quantity}
-                  onValueChange={(quantity) => patch(item.id, { quantity })}
-                />
-              )}
-            </Field>
-            <Field path={`items.${i}.unitPriceCents`} label="Unit price" labelClassName="sm:sr-only">
-              {(p) => (
-                <NumericInput
-                  {...p}
-                  kind="money"
-                  prefix="$"
-                  value={item.unitPriceCents}
-                  onValueChange={(unitPriceCents) => patch(item.id, { unitPriceCents })}
-                />
-              )}
-            </Field>
-            <div className="flex h-9 items-center gap-2 sm:justify-end">
-              <span className="text-[13px] text-muted-foreground sm:sr-only">Amount</span>
-              <output className="tabular text-sm" aria-label={`Amount, line ${i + 1}`}>
-                {formatUSD(lineTotals[i] ?? 0)}
-              </output>
+              <div className={cn('grid grid-cols-[72px_minmax(0,1fr)_auto] items-center gap-2', columns)}>
+                <div className="relative col-span-3 min-w-0 sm:col-span-1">
+                  <label htmlFor={desc.id} className="sr-only">
+                    Description, line {i + 1}
+                  </label>
+                  <Input
+                    id={desc.id}
+                    name={desc.name}
+                    aria-invalid={desc['aria-invalid']}
+                    aria-describedby={desc['aria-describedby']}
+                    value={item.description}
+                    placeholder="What you delivered"
+                    autoFocus={item.id === focusId}
+                    className="pr-10"
+                    onChange={(e) => patch(item.id, { description: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    aria-label={`Remove line ${i + 1}`}
+                    title={items.length === 1 ? 'An invoice needs at least one line' : 'Remove line'}
+                    disabled={items.length === 1}
+                    onClick={() => remove(item.id)}
+                    className="absolute top-1 right-1 flex size-8 items-center justify-center rounded-md text-subtle hover:bg-destructive-soft hover:text-destructive disabled:pointer-events-none disabled:opacity-0"
+                  >
+                    <Trash2 aria-hidden className="size-[15px]" />
+                  </button>
+                </div>
+                <div>
+                  <label htmlFor={qty.id} className="mb-1 block text-xs text-muted-foreground sm:sr-only">
+                    Qty
+                  </label>
+                  <NumericInput
+                    id={qty.id}
+                    name={qty.name}
+                    aria-invalid={qty['aria-invalid']}
+                    aria-describedby={qty['aria-describedby']}
+                    kind="decimal"
+                    decimals={3}
+                    value={item.quantity}
+                    onValueChange={(quantity) => patch(item.id, { quantity })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor={price.id} className="mb-1 block text-xs text-muted-foreground sm:sr-only">
+                    Unit price
+                  </label>
+                  <NumericInput
+                    id={price.id}
+                    name={price.name}
+                    aria-invalid={price['aria-invalid']}
+                    aria-describedby={price['aria-describedby']}
+                    kind="money"
+                    prefix="$"
+                    value={item.unitPriceCents}
+                    onValueChange={(unitPriceCents) => patch(item.id, { unitPriceCents })}
+                  />
+                </div>
+                <div className="flex flex-col items-end max-sm:min-w-[84px]">
+                  <span className="mb-1 text-xs text-muted-foreground sm:hidden">Amount</span>
+                  <output aria-label={`Amount, line ${i + 1}`} className="flex h-10 items-center font-medium tabular">
+                    {formatUSD(lineTotals[i] ?? 0)}
+                  </output>
+                </div>
+              </div>
+              {errors.map((c) => (
+                <span key={c.id} id={`${c.id}-error`} role="alert" className="pl-0.5 text-[12.5px] text-destructive">
+                  {c.error}
+                </span>
+              ))}
             </div>
-            <div className="flex justify-end">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove line ${i + 1}`}
-                title={items.length === 1 ? 'An invoice needs at least one line' : 'Remove line'}
-                disabled={items.length === 1}
-                onClick={() => remove(item.id)}
-              >
-                <Trash2 />
-              </Button>
-            </div>
-          </li>
-        ))}
-      </ul>
-
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" onClick={add}>
-          <Plus /> Add line
-        </Button>
-        <span className="hidden text-[13px] text-muted-foreground sm:inline">or press Enter in the last line</span>
+          );
+        })}
+        {items.length === 0 && (
+          <p className="rounded-[10px] border border-dashed border-input p-5 text-center text-muted-foreground">
+            No line items yet. Add what you're billing for.
+          </p>
+        )}
       </div>
+
+      <button
+        type="button"
+        onClick={add}
+        className="mt-2.5 inline-flex h-9 items-center gap-2 self-start rounded-lg border bg-card px-3 text-[13px] font-medium hover:border-input-hover hover:bg-hover-soft max-sm:h-12 max-sm:w-full max-sm:justify-center max-sm:border-[1.5px] max-sm:border-dashed max-sm:border-[#CFC5B3] max-sm:bg-transparent"
+      >
+        <Plus aria-hidden className="size-[15px]" /> Add line item
+      </button>
     </div>
   );
 }

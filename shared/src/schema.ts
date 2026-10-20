@@ -85,5 +85,8 @@ export type InvoiceInput = z.infer<typeof InvoiceInputSchema>;
 
 export const SendInvoiceSchema = z.object({
   to: email,
+  subject: z.string().trim().max(200).optional(),
+  message: z.string().max(5000).optional(),
+  copyToSender: z.boolean().optional(),
 });
 export type SendInvoiceRequest = z.infer<typeof SendInvoiceSchema>;

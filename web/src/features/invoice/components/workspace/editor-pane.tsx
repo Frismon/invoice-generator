@@ -12,7 +12,10 @@ export function EditorPane({ hidden }: { hidden: boolean }) {
       role="tabpanel"
       aria-labelledby="tab-edit"
       noValidate
-      className={cn('min-w-0 lg:border-r print:hidden', hidden && 'max-lg:hidden')}
+      className={cn(
+        'min-w-0 lg:h-full lg:overflow-y-auto lg:py-6 lg:pr-4 lg:[scrollbar-gutter:stable] print:hidden',
+        hidden && 'max-lg:hidden',
+      )}
       onSubmit={(e) => {
         e.preventDefault();
         void save();

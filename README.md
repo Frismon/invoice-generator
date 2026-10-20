@@ -24,7 +24,7 @@ No database setup: the SQLite file is created at `server/data/invoices.db` on fi
 
 ## Email setup
 
-Email goes through SMTP, so any provider works by editing `.env` only (examples for Resend and Mailtrap are in `.env.example`). Credentials are read on the server and never reach the browser.
+Email goes through SMTP, so any provider works by editing `.env` only (examples for Gmail, Resend and Mailtrap are in `.env.example`). Credentials are read on the server and never reach the browser. For Gmail, `SMTP_PASS` is a 16-character [App Password](https://myaccount.google.com/apppasswords) (2-Step Verification must be on), and `MAIL_FROM` must be the same Gmail address.
 
 If `SMTP_HOST` is empty, the app still works: the email is rendered and logged on the server, and the UI says it was not delivered. That keeps the project runnable without credentials.
 
@@ -74,22 +74,26 @@ web/src/
 | POST | `/api/invoices` | create |
 | PUT | `/api/invoices/:id` | update |
 | DELETE | `/api/invoices/:id` | delete |
-| POST | `/api/invoices/:id/send` | email `{ to }`, limited to 5 per minute |
+| POST | `/api/invoices/:id/send` | email `{ to, subject?, message?, copyToSender? }` with the PDF attached, limited to 5 per minute |
 | GET | `/api/customers` | past customers, one per name, most recent first |
 
 **Filling it in.** The form is ordered by what changes on every invoice: customer, line items, dates, discount and tax; your own business details sit collapsed at the bottom.
 - *Remembered defaults.* After a save, business details, tax rate, payment term and notes are stored in the browser and prefill the next invoice. Until the first save, the business section is open at the top.
 - *Past customers.* The customer name suggests customers from earlier invoices; picking one fills in their email and address.
 - *Payment terms.* On receipt / 7 / 14 / 30 days set the due date, and changing the issue date keeps the same term.
+- *Calendar.* Dates use a custom picker instead of the browser's native one: month navigation, today marked, days before the issue date disabled, and the payment window from issue to due date tinted. Arrow keys, Home/End and PageUp/PageDown (Shift for a year) move around; Enter picks, Esc closes.
+- *Ready to send.* The Send button stays disabled with a plain reason ("Add a customer name, an email", "Fix 1 issue to send") until the invoice can go out.
 - *Keyboard.* Enter in a line item jumps to the next line, or adds one on the last line. Number inputs select their content on focus, so typing replaces it.
 
-**Print / PDF.** The preview component is the printed document. Under `@media print` everything else is hidden, so the browser's *Save as PDF* outputs just the invoice on A4.
+**Print / PDF.** The preview component is the printed document (US Letter). Under `@media print` everything else is hidden, so the browser's *Save as PDF* outputs just the invoice. Emails carry a server-rendered PDF (`pdfkit`, `server/src/modules/invoices/invoice-pdf.ts`) with the same layout.
 
-**Reload.** Saving puts `?id=…` in the URL, so a reload (or a shared link) reopens the saved invoice. The dropdown in the header lists all saved invoices.
+**Sending.** The send dialog pre-fills the subject and message (`shared/src/email.ts`, the same defaults the server uses), shows the attachment, can copy the business address, and has sent, not-delivered (no SMTP) and failed states. A rejected SMTP login comes back as a 502 that says to check `SMTP_USER`/`SMTP_PASS`.
+
+**Reload.** Saving puts `?id=…` in the URL, so a reload (or a shared link) reopens the saved invoice. `/invoices` lists every saved invoice with All / Drafts / Sent filters and search; the invoice number in the header opens it.
 
 **Accessibility.** Every input has a label (visually hidden only where a column header already names it), errors are linked with `aria-describedby`, focus is visible on everything, the email dialog is a Base UI dialog (focus trap, Esc), the toggle for custom fields uses `aria-pressed`, and the status line is an `aria-live` region. `Ctrl/⌘+S` saves.
 
-**Layout.** Desktop: editor and live preview side by side, the preview sticks while you scroll. Phones: Edit / Preview tabs; line items turn into stacked cards with visible labels; the total and Save stay pinned to the bottom.
+**Layout.** Desktop: the page itself never scrolls; the form column scrolls on its own while the invoice preview stays in view, scaled to fit the screen. Phones: Edit / Preview tabs, stacked line-item cards, and a bottom bar with the amount due and Send.
 
 ## Decisions
 
@@ -113,6 +117,6 @@ web/src/
 - No delete button in the UI (the API supports it).
 - No currency or locale options; USD and US date format only.
 - No migrations folder: the table is created on startup. With more tables this moves to `drizzle-kit`.
-- Email has no PDF attachment; it contains the invoice as HTML and plain text.
+- The email PDF uses the built-in PDF fonts, so text outside Latin-1 (Cyrillic, CJK, emoji) would need an embedded font.
 - No end-to-end tests in CI.
 - Remembered defaults live in `localStorage`, so they are per browser; with accounts they would move to the database.

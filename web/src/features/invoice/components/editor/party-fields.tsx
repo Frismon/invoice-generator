@@ -1,4 +1,5 @@
-import { useId, type ChangeEvent } from 'react';
+import { useId, useState, type ChangeEvent } from 'react';
+import { Plus } from 'lucide-react';
 import type { Party } from '@invoice/shared';
 import { Field } from '@/components/form/field';
 import { Input } from '@/components/ui/input';
@@ -22,6 +23,8 @@ const isPickedFromList = (e: ChangeEvent<HTMLInputElement>) => {
 export function PartyFields({ prefix, value, onChange, suggestions = [], onSelect }: PartyFieldsProps) {
   const isBusiness = prefix === 'business';
   const listId = useId();
+  const [addingAddress, setAddingAddress] = useState(false);
+  const showAddress = isBusiness || addingAddress || Boolean(value.address);
 
   const onNameChange = (e: ChangeEvent<HTMLInputElement>) => {
     const match = isPickedFromList(e) && suggestions.find((p) => sameName(p.name, e.target.value));
@@ -31,11 +34,7 @@ export function PartyFields({ prefix, value, onChange, suggestions = [], onSelec
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field
-        path={`${prefix}.name`}
-        label={isBusiness ? 'Business name' : 'Customer name'}
-        hint={suggestions.length ? 'Pick a past customer to fill in their details' : undefined}
-      >
+      <Field path={`${prefix}.name`} label={isBusiness ? 'Business name' : 'Customer name'}>
         {(p) => (
           <>
             <Input
@@ -43,7 +42,7 @@ export function PartyFields({ prefix, value, onChange, suggestions = [], onSelec
               value={value.name}
               list={suggestions.length ? listId : undefined}
               autoComplete={isBusiness ? 'organization' : 'off'}
-              placeholder={isBusiness ? 'Your company' : 'Who is paying'}
+              placeholder={isBusiness ? 'Your company' : 'Company or person'}
               onChange={onNameChange}
             />
             {suggestions.length > 0 && (
@@ -58,7 +57,10 @@ export function PartyFields({ prefix, value, onChange, suggestions = [], onSelec
           </>
         )}
       </Field>
-      <Field path={`${prefix}.email`} label="Email" hint={isBusiness ? undefined : 'Used as the default recipient'}>
+      <Field
+        path={`${prefix}.email`}
+        label={isBusiness ? 'Email' : <>Email <span className="font-normal text-muted-foreground">— we'll send it here</span></>}
+      >
         {(p) => (
           <Input
             {...p}
@@ -70,18 +72,33 @@ export function PartyFields({ prefix, value, onChange, suggestions = [], onSelec
           />
         )}
       </Field>
-      <Field path={`${prefix}.address`} label="Address" className="sm:col-span-2">
-        {(p) => (
-          <Textarea
-            {...p}
-            rows={2}
-            className="min-h-0"
-            value={value.address}
-            placeholder="Street, city, postal code"
-            onChange={(e) => onChange('address', e.target.value)}
-          />
-        )}
-      </Field>
+      {showAddress ? (
+        <Field
+          path={`${prefix}.address`}
+          label={isBusiness ? 'Address' : <>Billing address <span className="font-normal text-muted-foreground">— optional</span></>}
+          className="sm:col-span-2"
+        >
+          {(p) => (
+            <Textarea
+              {...p}
+              rows={2}
+              className="min-h-[60px]"
+              value={value.address}
+              placeholder="Street, city, postal code"
+              autoFocus={addingAddress && !value.address}
+              onChange={(e) => onChange('address', e.target.value)}
+            />
+          )}
+        </Field>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAddingAddress(true)}
+          className="inline-flex h-9 items-center gap-1.5 self-start justify-self-start rounded-md text-sm font-semibold text-primary hover:underline sm:col-span-2"
+        >
+          <Plus aria-hidden className="size-4" /> Add billing address
+        </button>
+      )}
     </div>
   );
 }

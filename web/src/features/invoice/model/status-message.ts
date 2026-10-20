@@ -1,16 +1,23 @@
-import { formatDate, type Invoice } from '@invoice/shared';
+import type { Invoice } from '@invoice/shared';
 import type { Status } from './types';
 
-export function statusMessage(status: Status, saved: Invoice | null, isDirty: boolean): string {
+export type StatusTone = 'neutral' | 'busy' | 'warning' | 'success' | 'error';
+
+export interface StatusView {
+  label: string;
+  tone: StatusTone;
+}
+
+export function describeStatus(status: Status, saved: Invoice | null, isDirty: boolean, savedAgo: string): StatusView {
   switch (status.kind) {
     case 'loading':
-      return 'Loading…';
+      return { label: 'Loading…', tone: 'busy' };
     case 'saving':
-      return 'Saving…';
+      return { label: 'Saving…', tone: 'busy' };
     case 'error':
-      return status.message;
+      return { label: status.message, tone: 'error' };
   }
-  if (!saved) return 'Not saved yet';
-  if (isDirty) return 'Unsaved changes';
-  return saved.sentAt ? `Saved · emailed ${formatDate(saved.sentAt)}` : 'Saved';
+  if (!saved) return { label: 'Not saved yet', tone: 'neutral' };
+  if (isDirty) return { label: 'Unsaved changes', tone: 'warning' };
+  return { label: `Saved ${savedAgo}`, tone: 'success' };
 }

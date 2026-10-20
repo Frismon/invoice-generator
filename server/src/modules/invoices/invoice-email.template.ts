@@ -1,4 +1,11 @@
-import { computeTotals, formatDate, formatUSD, type Invoice } from '@invoice/shared';
+import {
+  computeTotals,
+  defaultEmailMessage,
+  defaultEmailSubject,
+  formatDate,
+  formatUSD,
+  type Invoice,
+} from '@invoice/shared';
 import type { OutgoingMail } from '../../mail/mailer';
 
 const escape = (s: string) =>
@@ -9,91 +16,123 @@ const escape = (s: string) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-const nl2br = (s: string) => escape(s).replace(/\n/g, '<br>');
+const nl2br = (s: string) => escape(s).replace(/\r?\n/g, '<br>');
 
+const INK = '#1D1B17';
+const MUTED = '#5E584E';
+const HAIRLINE = '#EEE7DA';
+const GREEN = '#1F4A35';
+const PILL = '#E6EFE8';
+const SANS = `'Instrument Sans',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`;
+const SERIF = `Georgia,'Times New Roman',serif`;
+const MONO = `ui-monospace,SFMono-Regular,Menlo,Consolas,monospace`;
 
-export function renderInvoiceEmail(invoice: Invoice): Omit<OutgoingMail, 'to'> {
+export interface InvoiceEmailOptions {
+  subject?: string;
+  message?: string;
+}
+
+export function renderInvoiceEmail(
+  invoice: Invoice,
+  options: InvoiceEmailOptions = {},
+): Pick<OutgoingMail, 'subject' | 'html' | 'text'> {
   const totals = computeTotals(invoice);
+  const business = invoice.business.name.trim();
+  const businessEmail = invoice.business.email.trim();
+  const subject = options.subject?.trim() || defaultEmailSubject(invoice);
+  const message = options.message ?? defaultEmailMessage(invoice);
+  const total = formatUSD(totals.totalCents);
+  const due = formatDate(invoice.dueDate);
+  const dueLabel = `Due by ${due}`;
   const visibleFields = invoice.customFields.filter((f) => f.visible);
-  const subject = `Invoice ${invoice.number} from ${invoice.business.name}: ${formatUSD(totals.totalCents)} due ${formatDate(invoice.dueDate)}`;
 
-  const cell = 'padding:8px 0;border-bottom:1px solid #e5e5e5;font-size:14px;';
-  const num = `${cell}text-align:right;white-space:nowrap;`;
+  const line = (label: string, value: string, extra = '') =>
+    `<tr>
+              <td style="padding:5px 0;font-size:14px;color:${MUTED};${extra}">${label}</td>
+              <td align="right" style="padding:5px 0;font-size:14px;color:${INK};white-space:nowrap;${extra}">${value}</td>
+            </tr>`;
 
-  const rows = invoice.items
+  const itemLines = invoice.items
+    .map((item, i) =>
+      line(
+        `${escape(item.description)} &times; ${item.quantity}`,
+        formatUSD(totals.lineTotals[i] ?? 0),
+      ),
+    )
+    .join('\n            ');
+
+  const fieldLines = visibleFields
     .map(
-      (item, i) => `
-      <tr>
-        <td style="${cell}">${escape(item.description)}</td>
-        <td style="${num}">${item.quantity}</td>
-        <td style="${num}">${formatUSD(item.unitPriceCents)}</td>
-        <td style="${num}">${formatUSD(totals.lineTotals[i] ?? 0)}</td>
-      </tr>`,
+      (f) =>
+        `<p style="margin:0 0 4px;font-size:13px;color:${MUTED};">${escape(f.label)}: <span style="color:${INK};">${escape(f.value)}</span></p>`,
     )
     .join('');
 
-  const meta = [
-    ['Invoice', invoice.number],
-    ['Issued', formatDate(invoice.issueDate)],
-    ['Due', formatDate(invoice.dueDate)],
-    ...visibleFields.map((f) => [f.label, f.value] as const),
-  ]
-    .map(
-      ([k, v]) =>
-        `<tr><td style="padding:2px 16px 2px 0;color:#737373;font-size:13px;">${escape(k)}</td><td style="font-size:13px;">${escape(v)}</td></tr>`,
-    )
-    .join('');
-
-  const sum = (label: string, value: string, strong = false) =>
-    `<tr><td style="padding:4px 0;font-size:14px;${strong ? 'font-weight:600;' : 'color:#525252;'}">${label}</td><td style="padding:4px 0;text-align:right;font-size:14px;${strong ? 'font-weight:600;' : ''}">${value}</td></tr>`;
+  const totalRow = `<tr>
+              <td style="padding:10px 0 0;font-size:15px;font-weight:700;color:${INK};border-top:1px solid ${HAIRLINE};">Total</td>
+              <td align="right" style="padding:10px 0 0;font-size:15px;font-weight:700;color:${INK};white-space:nowrap;border-top:1px solid ${HAIRLINE};">${total}</td>
+            </tr>`;
 
   const html = `<!doctype html>
-<html><body style="margin:0;padding:24px;background:#fafafa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#171717;">
-  <table role="presentation" width="100%" style="max-width:640px;background:#ffffff;border:1px solid #e5e5e5;padding:32px;">
-    <tr><td>
-      <p style="margin:0 0 4px;font-size:13px;color:#737373;">From</p>
-      <p style="margin:0 0 24px;font-size:16px;font-weight:600;">${escape(invoice.business.name)}</p>
-      <p style="margin:0 0 4px;font-size:13px;color:#737373;">Billed to</p>
-      <p style="margin:0 0 24px;font-size:14px;">${escape(invoice.customer.name)}${invoice.customer.address ? `<br>${nl2br(invoice.customer.address)}` : ''}</p>
-      <table role="presentation" style="margin-bottom:24px;">${meta}</table>
-      <table role="presentation" width="100%" style="border-collapse:collapse;">
-        <tr>
-          <th align="left" style="${cell}font-size:12px;color:#737373;font-weight:500;">Description</th>
-          <th align="right" style="${cell}font-size:12px;color:#737373;font-weight:500;">Qty</th>
-          <th align="right" style="${cell}font-size:12px;color:#737373;font-weight:500;">Price</th>
-          <th align="right" style="${cell}font-size:12px;color:#737373;font-weight:500;">Amount</th>
-        </tr>
-        ${rows}
+<html><body style="margin:0;padding:0;background:#F4EFE7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4EFE7;font-family:${SANS};color:${INK};">
+    <tr><td align="center" style="padding:40px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+        <tr><td style="padding:0 4px 14px;font-size:13px;color:${MUTED};"><b style="color:${INK};">${escape(business)}</b> via Invoice Studio</td></tr>
+        <tr><td style="background:#FFFFFF;border-radius:14px;padding:36px 32px;">
+          <p style="margin:0 0 10px;font-family:${MONO};font-size:12px;color:${MUTED};">${escape(invoice.number)}</p>
+          <h1 style="margin:0 0 24px;font-family:${SERIF};font-size:30px;line-height:1.2;font-weight:500;color:${INK};">You have a new invoice${business ? ` from ${escape(business)}` : ''}</h1>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PILL};border-radius:10px;">
+            <tr>
+              <td style="padding:20px 22px;">
+                <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#22432F;">Amount due</p>
+                <p style="margin:0;font-size:13px;color:#33553F;">${escape(dueLabel)}</p>
+              </td>
+              <td align="right" style="padding:20px 22px;font-family:${SERIF};font-size:34px;font-weight:700;color:${GREEN};white-space:nowrap;">${total}</td>
+            </tr>
+          </table>
+          <p style="margin:24px 0;font-size:15px;line-height:1.6;color:#3A362F;">${nl2br(message)}</p>
+          ${fieldLines ? `<div style="margin:0 0 20px;">${fieldLines}</div>` : ''}
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid ${HAIRLINE};">
+            <tr><td colspan="2" style="height:12px;line-height:12px;font-size:0;">&nbsp;</td></tr>
+            ${itemLines}
+            ${totals.discountCents > 0 ? line('Discount', `&minus;${formatUSD(totals.discountCents)}`) : ''}
+            ${invoice.taxRate > 0 ? line(`Tax (${invoice.taxRate}%)`, formatUSD(totals.taxCents)) : ''}
+            ${totalRow}
+          </table>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;border:1px solid ${HAIRLINE};border-radius:10px;">
+            <tr>
+              <td width="40" style="padding:12px 0 12px 14px;">
+                <div style="width:32px;height:40px;line-height:40px;background:${PILL};border-radius:6px;text-align:center;font-size:10px;font-weight:700;color:${GREEN};">PDF</div>
+              </td>
+              <td style="padding:12px 14px;">
+                <p style="margin:0;font-size:14px;font-weight:600;color:${INK};">${escape(invoice.number)}.pdf</p>
+                <p style="margin:2px 0 0;font-size:12px;color:${MUTED};">Attached</p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+        ${businessEmail ? `<tr><td align="center" style="padding:20px 4px 0;font-size:12px;line-height:1.6;color:${MUTED};">Questions about this invoice? Reply to this email to reach ${escape(businessEmail)}.</td></tr>` : ''}
       </table>
-      <table role="presentation" width="100%" style="margin-top:16px;">
-        ${sum('Subtotal', formatUSD(totals.subtotalCents))}
-        ${totals.discountCents > 0 ? sum('Discount', `−${formatUSD(totals.discountCents)}`) : ''}
-        ${invoice.taxRate > 0 ? sum(`Tax (${invoice.taxRate}%)`, formatUSD(totals.taxCents)) : ''}
-        ${sum('Total due', formatUSD(totals.totalCents), true)}
-      </table>
-      ${invoice.notes ? `<p style="margin:24px 0 0;font-size:13px;color:#525252;">${nl2br(invoice.notes)}</p>` : ''}
     </td></tr>
   </table>
 </body></html>`;
 
   const text = [
-    `Invoice ${invoice.number} from ${invoice.business.name}`,
-    `Billed to: ${invoice.customer.name}`,
-    `Issued: ${formatDate(invoice.issueDate)}  Due: ${formatDate(invoice.dueDate)}`,
+    message,
+    '',
+    `${invoice.number} · Amount due ${total} · ${dueLabel}`,
     ...visibleFields.map((f) => `${f.label}: ${f.value}`),
     '',
-    ...invoice.items.map(
-      (item, i) =>
-        `${item.description}  ${item.quantity} × ${formatUSD(item.unitPriceCents)} = ${formatUSD(totals.lineTotals[i] ?? 0)}`,
-    ),
+    ...invoice.items.map((item, i) => `${item.description} × ${item.quantity}  ${formatUSD(totals.lineTotals[i] ?? 0)}`),
+    totals.discountCents > 0 ? `Discount  -${formatUSD(totals.discountCents)}` : null,
+    invoice.taxRate > 0 ? `Tax (${invoice.taxRate}%)  ${formatUSD(totals.taxCents)}` : null,
+    `Total  ${total}`,
     '',
-    `Subtotal: ${formatUSD(totals.subtotalCents)}`,
-    totals.discountCents > 0 ? `Discount: -${formatUSD(totals.discountCents)}` : '',
-    invoice.taxRate > 0 ? `Tax (${invoice.taxRate}%): ${formatUSD(totals.taxCents)}` : '',
-    `Total due: ${formatUSD(totals.totalCents)}`,
-    invoice.notes ? `\n${invoice.notes}` : '',
+    `Attached: ${invoice.number}.pdf`,
+    businessEmail ? `\nQuestions about this invoice? Reply to this email to reach ${businessEmail}.` : null,
   ]
-    .filter((line) => line !== '')
+    .filter((l): l is string => l !== null)
     .join('\n');
 
   return { subject, html, text };

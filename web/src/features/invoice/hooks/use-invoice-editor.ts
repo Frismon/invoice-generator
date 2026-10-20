@@ -5,6 +5,7 @@ import {
   issuesByPath,
   toFieldIssues,
   type Invoice,
+  type SendInvoiceRequest,
   type SendInvoiceResponse,
 } from '@invoice/shared';
 import { focusFirstInvalid } from '@/lib/dom';
@@ -28,10 +29,8 @@ export function useInvoiceEditor({ onSaved }: Options = {}) {
 
   const totals = useMemo(() => computeTotals(draft), [draft]);
   const validation = useMemo(() => InvoiceInputSchema.safeParse(draft), [draft]);
-  const clientErrors = useMemo(
-    () => (validation.success ? {} : issuesByPath(toFieldIssues(validation.error))),
-    [validation],
-  );
+  const issues = useMemo(() => (validation.success ? [] : toFieldIssues(validation.error)), [validation]);
+  const clientErrors = useMemo(() => issuesByPath(issues), [issues]);
 
   const savedSnapshot = useMemo(() => saved && JSON.stringify(toDraft(saved)), [saved]);
   const isDirty = savedSnapshot !== JSON.stringify(draft);
@@ -68,7 +67,9 @@ export function useInvoiceEditor({ onSaved }: Options = {}) {
   }, []);
 
   const open = (id: string) => {
-    if (confirmDiscard()) void load(id);
+    if (!confirmDiscard()) return false;
+    void load(id);
+    return true;
   };
 
   const startNew = () => {
@@ -102,10 +103,10 @@ export function useInvoiceEditor({ onSaved }: Options = {}) {
   }, [validation, saved, onSaved]);
 
   const send = useCallback(
-    async (to: string): Promise<SendInvoiceResponse> => {
+    async (request: SendInvoiceRequest): Promise<SendInvoiceResponse> => {
       const invoice = isDirty ? await save() : saved;
       if (!invoice) throw new Error('Fix the highlighted fields first, then send.');
-      const result = await invoiceApi.send(invoice.id, to);
+      const result = await invoiceApi.send(invoice.id, request);
       if (result.sentAt) dispatch({ type: 'sent', sentAt: result.sentAt });
       onSaved?.();
       return result;
@@ -124,6 +125,7 @@ export function useInvoiceEditor({ onSaved }: Options = {}) {
     totals,
     status,
     isDirty,
+    issues,
     errorFor,
     update,
     markTouched,
