@@ -8,7 +8,7 @@ import { sendInvoiceDialog } from '../send-invoice-dialog';
 
 export function SendButton({ className, large = false, hintId = 'send-hint' }: { className?: string; large?: boolean; hintId?: string }) {
   const { draft, issues } = useEditor();
-  const { canSend } = sendReadiness(draft, issues);
+  const { canSend, hint } = sendReadiness(draft, issues);
   const sizing = large ? 'h-12 rounded-xl px-5 text-[15px]' : '';
 
   if (!canSend) {
@@ -16,7 +16,7 @@ export function SendButton({ className, large = false, hintId = 'send-hint' }: {
       <Button
         size="lg"
         disabled
-        aria-describedby={hintId}
+        aria-describedby={hint ? hintId : undefined}
         className={cn('bg-[#D9D2C5] text-muted-foreground disabled:opacity-100', sizing, className)}
       >
         Send invoice
