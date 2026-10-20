@@ -1,4 +1,4 @@
-import { PartySchema, type InvoiceInput, type Party } from '@invoice/shared';
+import { PartyDraftSchema, type InvoiceInput, type Party } from '@invoice/shared';
 
 const KEY = 'invoice-defaults';
 
@@ -12,7 +12,7 @@ export interface InvoiceDefaults {
 function parse(raw: unknown): InvoiceDefaults | null {
   if (!raw || typeof raw !== 'object') return null;
   const { business, taxRate, termDays, notes } = raw as Record<string, unknown>;
-  const party = PartySchema.safeParse(business);
+  const party = PartyDraftSchema.safeParse(business);
   if (!party.success || typeof taxRate !== 'number' || typeof termDays !== 'number' || typeof notes !== 'string') {
     return null;
   }

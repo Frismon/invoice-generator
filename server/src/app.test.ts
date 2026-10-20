@@ -69,6 +69,21 @@ describe('invoices API', () => {
     expect(paths).toContain('items.0.quantity');
   });
 
+  it('saves an unfinished invoice but refuses to send it', async () => {
+    const draft = { ...invoice, customer: { name: '', email: '', address: '' }, items: [], discountCents: 0 };
+    const created = await app.inject({ method: 'POST', url: '/api/invoices', payload: draft });
+    expect(created.statusCode).toBe(201);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/invoices/${created.json().id}/send`,
+      payload: { to: 'me@example.com' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().issues.map((i: { path: string }) => i.path)).toEqual(['customer.name', 'items']);
+    expect(sent).toHaveLength(0);
+  });
+
   it('returns 409 for a duplicate invoice number', async () => {
     await app.inject({ method: 'POST', url: '/api/invoices', payload: invoice });
     const res = await app.inject({ method: 'POST', url: '/api/invoices', payload: invoice });

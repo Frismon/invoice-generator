@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer } from 'react';
 import {
+  InvoiceDraftSchema,
   InvoiceInputSchema,
   computeTotals,
   issuesByPath,
@@ -25,10 +26,12 @@ interface Options {
 
 export function useInvoiceEditor({ onSaved }: Options = {}) {
   const [state, dispatch] = useReducer(editorReducer, undefined, createInitialState);
-  const { draft, saved, status, touched, submitted, serverErrors } = state;
+  const { draft, saved, status, touched, serverErrors } = state;
 
   const totals = useMemo(() => computeTotals(draft), [draft]);
+  // Full rules drive field hints and send readiness; saving only needs the draft rules.
   const validation = useMemo(() => InvoiceInputSchema.safeParse(draft), [draft]);
+  const draftCheck = useMemo(() => InvoiceDraftSchema.safeParse(draft), [draft]);
   const issues = useMemo(() => (validation.success ? [] : toFieldIssues(validation.error)), [validation]);
   const clientErrors = useMemo(() => issuesByPath(issues), [issues]);
 
@@ -42,8 +45,8 @@ export function useInvoiceEditor({ onSaved }: Options = {}) {
 
   const errorFor = useCallback(
     (path: string) =>
-      serverErrors[path] ?? (submitted || touched.has(path) ? clientErrors[path] : undefined),
-    [serverErrors, clientErrors, submitted, touched],
+      serverErrors[path] ?? (touched.has(path) ? clientErrors[path] : undefined),
+    [serverErrors, clientErrors, touched],
   );
 
   const update = useCallback((recipe: Recipe) => dispatch({ type: 'edit', recipe }), []);
@@ -80,18 +83,18 @@ export function useInvoiceEditor({ onSaved }: Options = {}) {
   };
 
   const save = useCallback(async (): Promise<Invoice | null> => {
-    if (!validation.success) {
-      dispatch({ type: 'invalid' });
+    if (!draftCheck.success) {
+      dispatch({ type: 'invalid', issues: toFieldIssues(draftCheck.error) });
       focusFirstInvalid();
       return null;
     }
     dispatch({ type: 'saving' });
     try {
       const invoice = saved
-        ? await invoiceApi.update(saved.id, validation.data)
-        : await invoiceApi.create(validation.data);
+        ? await invoiceApi.update(saved.id, draftCheck.data)
+        : await invoiceApi.create(draftCheck.data);
       opened(invoice);
-      invoiceDefaults.write(validation.data, termDays(validation.data));
+      invoiceDefaults.write(draftCheck.data, termDays(draftCheck.data));
       onSaved?.();
       return invoice;
     } catch (err) {
@@ -100,7 +103,7 @@ export function useInvoiceEditor({ onSaved }: Options = {}) {
       if (issues.length) focusFirstInvalid();
       return null;
     }
-  }, [validation, saved, onSaved]);
+  }, [draftCheck, saved, onSaved]);
 
   const send = useCallback(
     async (request: SendInvoiceRequest): Promise<SendInvoiceResponse> => {

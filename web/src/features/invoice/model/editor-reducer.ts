@@ -8,7 +8,6 @@ export function createInitialState(): EditorState {
     saved: null,
     status: { kind: 'idle' },
     touched: new Set(),
-    submitted: false,
     serverErrors: {},
   };
 }
@@ -26,13 +25,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return { ...state, status: { kind: 'loading' } };
 
     case 'saving':
-      return { ...state, submitted: true, status: { kind: 'saving' } };
+      return { ...state, status: { kind: 'saving' } };
 
+    // Only the draft-rule failures are highlighted, not every field still empty.
     case 'invalid':
       return {
         ...state,
-        submitted: true,
         status: { kind: 'error', message: 'Fix the highlighted fields before saving.' },
+        serverErrors: issuesByPath(action.issues),
       };
 
     case 'opened':

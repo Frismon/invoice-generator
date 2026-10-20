@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { computeTotals, lineTotalCents } from './calc';
 import { addDaysISO, daysBetween } from './date';
 import { formatUSD, parseMoneyInput, roundCents } from './money';
-import { InvoiceInputSchema, type InvoiceInput } from './schema';
+import { InvoiceDraftSchema, InvoiceInputSchema, type InvoiceInput } from './schema';
 
 describe('computeTotals', () => {
   it('matches the brief: 2 × $50 − $10 discount + 10% tax = $99.00', () => {
@@ -107,6 +107,21 @@ describe('InvoiceInputSchema', () => {
 
   it('rejects a due date before the issue date', () => {
     expect(pathsOf({ ...base, dueDate: '2026-10-01' })).toEqual(['dueDate']);
+  });
+
+  it('saves an unfinished draft but does not treat it as sendable', () => {
+    const unfinished = {
+      ...base,
+      customer: { name: '', email: '', address: '' },
+      items: [{ id: 'a', description: '', quantity: 1, unitPriceCents: 0 }],
+      discountCents: 0,
+    };
+    expect(InvoiceDraftSchema.safeParse(unfinished).success).toBe(true);
+    expect(pathsOf(unfinished)).toEqual(['customer.name', 'items.0.description']);
+  });
+
+  it('still requires an invoice number on a draft', () => {
+    expect(InvoiceDraftSchema.safeParse({ ...base, number: ' ' }).success).toBe(false);
   });
 
   it('custom fields never affect totals', () => {

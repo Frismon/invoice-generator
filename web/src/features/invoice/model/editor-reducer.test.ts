@@ -32,12 +32,12 @@ describe('editorReducer', () => {
 
   it('opening an invoice resets form state and strips server fields from the draft', () => {
     let state = editorReducer(createInitialState(), { type: 'touch', path: 'number' });
-    state = editorReducer(state, { type: 'invalid' });
+    state = editorReducer(state, { type: 'invalid', issues: [{ path: 'number', message: 'Required' }] });
     state = editorReducer(state, { type: 'opened', invoice });
 
     expect(state.saved).toBe(invoice);
     expect(state.draft).not.toHaveProperty('id');
-    expect(state.submitted).toBe(false);
+    expect(state.serverErrors).toEqual({});
     expect(state.touched.size).toBe(0);
     expect(state.status).toEqual({ kind: 'idle' });
   });
